@@ -1,4 +1,4 @@
-const CUBE_MAP = {
+export const CUBE_MAP = {
   1: { surface: 0, row: 0, col: 0, obstacle: null, player: null },
   2: { surface: 0, row: 0, col: 1, obstacle: null, player: null },
   3: { surface: 0, row: 0, col: 2, obstacle: null, player: null },
