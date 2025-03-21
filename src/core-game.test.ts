@@ -1,14 +1,24 @@
-import { Board, Player } from "./core-game";
+import {
+  Board,
+  Player,
+  PLAYER_START_TILES,
+  IN_PLAY_SURFACES,
+} from "./core-game";
 
 // Helper function to create a new game instance
 function createGame() {
   const board = new Board();
-  const players = [
-    new Player("0"),
-    new Player("1"),
-    new Player("2"),
-    new Player("3"),
-  ];
+  const players = PLAYER_START_TILES.map((startTile, index) => {
+    const player = new Player(`player${index + 1}`);
+    const result = player.move(startTile, board);
+    const surface = board.cubeMap[startTile]?.surface;
+    if (surface && surface in Player.ATTRIBUTES_BY_STARTING_SURFACE) {
+      player.absoluteDirection =
+        Player.ATTRIBUTES_BY_STARTING_SURFACE[surface].dir;
+      player.startDir = Player.ATTRIBUTES_BY_STARTING_SURFACE[surface].dir;
+    }
+    return player;
+  });
   return { board, players };
 }
 
@@ -21,10 +31,22 @@ function testGameSetup() {
   console.log("Board initialized with obstacles:", board.obstacles.length);
   console.log("Active players:", board.activePlayerTotal);
 
-  // Verify player starting positions
+  // Verify player starting positions and directions
   players.forEach((player, index) => {
-    console.log(`Player ${index} starting position:`, player.current);
+    console.log(`Player ${index}:`, {
+      id: player.id,
+      start: player.start,
+      current: player.current,
+      direction: player.absoluteDirection,
+      goal: player.goal,
+    });
   });
+
+  // Verify playable surfaces
+  const playableTiles = Object.entries(board.cubeMap).filter(([_, tile]) =>
+    IN_PLAY_SURFACES.includes(tile.surface)
+  ).length;
+  console.log("Playable tiles:", playableTiles);
 }
 
 // Test player movement
@@ -33,25 +55,34 @@ function testPlayerMovement() {
   const { board, players } = createGame();
   const player = players[0];
 
-  // Test first move
-  console.log("Testing first move...");
-  const firstMove = player.move(38, board); // Starting position for player 0
-  console.log("First move result:", {
-    current: firstMove.current,
-    collected: firstMove.collected,
-    surrounding: firstMove.surrounding,
+  // Test first move (already done in createGame)
+  console.log("Initial state:", {
+    current: player.current,
+    direction: player.absoluteDirection,
+    surrounding: player.getSurrounding(board),
   });
 
   // Test subsequent moves
   console.log("\nTesting subsequent moves...");
-  const moves = [39, 40, 41]; // Example moves
-  moves.forEach((tile, index) => {
-    const result = player.move(tile, board);
-    console.log(`Move ${index + 1} result:`, {
-      current: result.current,
-      collected: result.collected,
-      surrounding: result.surrounding,
-    });
+  const moves = [
+    { tile: 39, dir: "right" },
+    { tile: 40, dir: "right" },
+    { tile: 45, dir: "down" },
+  ];
+
+  moves.forEach((move, index) => {
+    try {
+      const result = player.move(move.tile, board);
+      console.log(`Move ${index + 1} result:`, {
+        current: result.current,
+        direction: player.absoluteDirection,
+        collected: result.collected,
+        surrounding: result.surrounding,
+        win: result.win,
+      });
+    } catch (error) {
+      console.log(`Move ${index + 1} failed:`, error);
+    }
   });
 }
 
@@ -61,9 +92,6 @@ function testObstacleCollection() {
   const { board, players } = createGame();
   const player = players[0];
 
-  // Initialize player
-  player.move(38, board);
-
   // Find an obstacle to collect
   const obstacleTile = Object.entries(board.cubeMap).find(
     ([_, tile]) => tile.obstacle && !tile.obstacle.collectedBy
@@ -71,37 +99,55 @@ function testObstacleCollection() {
 
   if (obstacleTile) {
     console.log("Found obstacle at tile:", obstacleTile);
-
-    // Move to collect the obstacle
-    const result = player.move(Number(obstacleTile), board);
-    console.log("Collection attempt result:", {
-      collected: result.collected,
-      current: result.current,
+    const obstacle = board.cubeMap[Number(obstacleTile)].obstacle;
+    console.log("Obstacle details:", {
+      value: obstacle?.value,
+      color: obstacle?.color,
+      id: obstacle?.id,
     });
 
-    // Verify collection
-    const collections = board.getCollectionByPlayerId(player.id);
-    console.log("Player collections:", collections);
+    // Move to collect the obstacle
+    try {
+      const result = player.move(Number(obstacleTile), board);
+      console.log("Collection attempt result:", {
+        collected: result.collected,
+        current: result.current,
+        surrounding: result.surrounding,
+      });
+
+      // Verify collection
+      const collections = board.getCollectionByPlayerId(player.id);
+      console.log("Player collections:", collections);
+    } catch (error) {
+      console.log("Collection attempt failed:", error);
+    }
   }
 }
 
-// Test player collision
+// Test player collision and trading
 function testPlayerCollision() {
-  console.log("\n=== Testing Player Collision ===");
+  console.log("\n=== Testing Player Collision and Trading ===");
   const { board, players } = createGame();
   const player1 = players[0];
   const player2 = players[1];
 
   // Initialize players
-  player1.move(38, board);
-  player2.move(118, board);
+  console.log("Initial positions:", {
+    player1: player1.current,
+    player2: player2.current,
+  });
 
   // Try to move player2 to player1's position
-  const result = player2.move(39, board);
-  console.log("Collision result:", {
-    crashed: result.crashed,
-    current: result.current,
-  });
+  try {
+    const result = player2.move(player1.current!, board);
+    console.log("Collision result:", {
+      crashed: result.crashed,
+      current: result.current,
+      surrounding: result.surrounding,
+    });
+  } catch (error) {
+    console.log("Collision attempt failed:", error);
+  }
 }
 
 // Test win condition
@@ -110,17 +156,23 @@ function testWinCondition() {
   const { board, players } = createGame();
   const player = players[0];
 
-  // Initialize player
-  player.move(38, board);
-
-  // Move to goal position
-  const goal = 188; // Goal for player 0
-  const result = player.move(goal, board);
-  console.log("Win check result:", {
-    win: result.win,
-    current: result.current,
+  console.log("Initial state:", {
+    current: player.current,
+    goal: player.goal,
     collections: board.getCollectionByPlayerId(player.id),
   });
+
+  // Move to goal position
+  try {
+    const result = player.move(player.goal!, board);
+    console.log("Win check result:", {
+      win: result.win,
+      current: result.current,
+      collections: board.getCollectionByPlayerId(player.id),
+    });
+  } catch (error) {
+    console.log("Win condition test failed:", error);
+  }
 }
 
 // Run all tests

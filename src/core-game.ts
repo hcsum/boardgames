@@ -133,7 +133,7 @@ class Board {
     );
 
     const countPerSurface: Record<number, string[]> = {};
-    const OBSTACLE_TOTAL = 12;
+    const OBSTACLE_TOTAL = 10;
     const ATTEMPT_TOTAL = 500;
     const result: Obstacle[] = [];
 
@@ -152,7 +152,6 @@ class Board {
             ? OBSTACLE_TYPES[curTypeIdx % 5]
             : OBSTACLE_TYPES[5];
         const newObstacle = this._generateObstacle(start);
-
         // validate the obstacle
         newObstacle.forEach((i) => {
           const tile = this.cubeMap[i];
@@ -205,11 +204,11 @@ class Board {
   getAdjecentTile(
     tileNum: number,
     dir: "up" | "down" | "left" | "right"
-  ): number | null {
+  ): number {
     const dirs = ["up", "down", "left", "right"];
     if (!dirs.includes(dir)) throw "GET_ADJECEN_TILE_INCORRECT_DIR";
     const tile = this.cubeMap[tileNum];
-    if (!tile) return null;
+    if (!tile) throw "GET_ADJECEN_TILE_INCORRECT_TILE";
     const { surface, row, col } = tile;
     let result: number | undefined;
 
@@ -287,7 +286,7 @@ class Board {
         break;
     }
 
-    return result || null;
+    return result;
   }
 
   getThingsInPath(
@@ -479,7 +478,7 @@ class Board {
     }
     this.obstacles
       .filter((ob) => ob.id === obstacle.id)
-      .forEach((ob) => (ob.collectedBy = undefined));
+      .forEach((ob) => (ob.collectedBy = null));
   }
 
   handleCollectionTrading(tileNum: number, player1: Player, player2: Player) {
@@ -513,6 +512,16 @@ class Board {
     return null;
   }
 }
+
+type MoveResult = {
+  crashed: Obstacle | Player | null;
+  collected: boolean;
+  win: boolean;
+  prev: number | null;
+  current: number;
+  surrounding: Record<string, any>;
+  shoot: { direction: string; player: Player } | null;
+};
 
 class Player {
   static ATTRIBUTES_BY_STARTING_SURFACE = {
@@ -556,31 +565,20 @@ class Player {
     this.id = id;
   }
 
-  move(
-    next: number,
-    board: Board
-  ): {
-    crashed?: Obstacle | Player;
-    collected: boolean;
-    win: boolean;
-    prev: number | null;
-    current: number;
-    surrounding?: Record<string, any>;
-    shoot?: { direction: string; player: Player };
-  } {
+  move(next: number, board: Board): MoveResult {
     const nextTile = board.cubeMap[next];
 
     if (!nextTile || !IN_PLAY_SURFACES.includes(nextTile.surface))
       throw "MOVE_FAIL_UNKNOWN_TILE";
 
-    const result = {
-      crashed: undefined,
+    const result: MoveResult = {
+      crashed: null,
       collected: false,
       win: false,
       prev: this.current,
       current: next,
-      surrounding: undefined,
-      shoot: undefined,
+      shoot: null,
+      surrounding: {},
     };
 
     // handle player's first move
@@ -637,11 +635,12 @@ class Player {
     return result;
   }
 
-  _shoot(board: Board): { direction: string; player: Player } | undefined {
+  _shoot(board: Board): { direction: string; player: Player } | null {
     const { up } = this.getSurrounding(board);
     if (up?.player) {
       return { direction: this.absoluteDirection!, player: up.player };
     }
+    return null;
   }
 
   _checkWin(next: number, board: Board): boolean {
@@ -740,7 +739,7 @@ class Player {
   }
 
   _getAbsoluteSurrounding(tileNum: number, board: Board): Record<string, any> {
-    const result = {
+    const result: any = {
       up: null,
       down: null,
       left: null,
