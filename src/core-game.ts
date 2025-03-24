@@ -1,6 +1,9 @@
-// Core game constants
-export const TILE_TOTAL = 225;
-export const PLAYER_START_TILES = [38, 118, 188, 108];
+// Define a constant for the grid size
+export const GRID_SIZE = 5;
+
+// Update the TILE_TOTAL to reflect the grid size
+export const TILE_TOTAL = GRID_SIZE * GRID_SIZE * 9; // 6 surfaces
+export const PLAYER_START_TILES = [37, 117, 187, 107];
 export const OBSTACLE_TYPES = [
   { value: "red", color: "FF0000" },
   { value: "blue", color: "0000FF" },
@@ -32,8 +35,7 @@ class Obstacle {
   }
 }
 
-// Fix cubeMap type definition
-type CubeTile = {
+export type TileObject = {
   surface: number;
   row: number;
   col: number;
@@ -43,17 +45,16 @@ type CubeTile = {
 
 class Board {
   cubeArrays: number[][][];
-  cubeMap: CubeTile[];
+  tileObjects: TileObject[];
   obstacles: Obstacle[];
   activePlayerTotal = 0;
 
   constructor() {
-    this.cubeArrays = this._getCubeArrays();
-    this.cubeMap = this._getCubeMap(this.cubeArrays);
-    // Initialize cubeMap as an array with proper indices
-    const tempMap: CubeTile[] = [];
+    this.cubeArrays = this.getCubeArrays();
+    this.tileObjects = this.getTileObjects();
+    const tempMap: TileObject[] = [];
     for (let i = 0; i < TILE_TOTAL; i++) {
-      tempMap[i] = this.cubeMap[i] || {
+      tempMap[i] = this.tileObjects[i] || {
         surface: 0,
         row: 0,
         col: 0,
@@ -61,13 +62,13 @@ class Board {
         player: null,
       };
     }
-    this.cubeMap = tempMap;
+    this.tileObjects = tempMap;
     this.obstacles = this._setAllObstactles();
   }
 
   _checkDirection(from: number, to: number): "up" | "down" | undefined {
-    const fromTile = this.cubeMap[from];
-    const toTile = this.cubeMap[to];
+    const fromTile = this.tileObjects[from];
+    const toTile = this.tileObjects[to];
     if (fromTile.surface === toTile.surface) return;
     if (fromTile.surface < toTile.surface) {
       return "up";
@@ -98,9 +99,11 @@ class Board {
     const third = this.getAdjecentTile(start, repeatUpOrDown());
 
     let forth: number;
-    if (this.cubeMap[second].surface === this.cubeMap[start].surface) {
+    if (this.tileObjects[second].surface === this.tileObjects[start].surface) {
       forth = this.getAdjecentTile(second, repeatUpOrDown());
-    } else if (this.cubeMap[third].surface === this.cubeMap[start].surface) {
+    } else if (
+      this.tileObjects[third].surface === this.tileObjects[start].surface
+    ) {
       forth = this.getAdjecentTile(third, repeatLeftOrRight());
     } else {
       throw "MISFORMED_OBSTACLE";
@@ -114,26 +117,24 @@ class Board {
       5: { col: 4 },
       7: { row: 4 },
     };
-    const CORNERS = [70, 145, 140];
 
-    // Create array of valid tile numbers
+    // Create tile number array that is valid to have an obstacle
     const tiles = Array.from({ length: TILE_TOTAL }, (_, i) => i + 1).filter(
       (i) => {
-        const tile = this.cubeMap[i];
+        const tile = this.tileObjects[i];
         if (!tile) return false;
 
         return (
           !PLAYER_START_TILES.includes(i) &&
-          IN_PLAY_SURFACES.includes(tile.surface) &&
-          !CORNERS.includes(i) &&
-          EDGES[tile.surface]?.row !== tile.row &&
-          EDGES[tile.surface]?.col !== tile.col
+          IN_PLAY_SURFACES.includes(tile.surface)
+          // EDGES[tile.surface]?.row !== tile.row &&
+          // EDGES[tile.surface]?.col !== tile.col
         );
       }
     );
 
     const countPerSurface: Record<number, string[]> = {};
-    const OBSTACLE_TOTAL = 10;
+    const OBSTACLE_TOTAL = 12;
     const ATTEMPT_TOTAL = 500;
     const result: Obstacle[] = [];
 
@@ -154,7 +155,7 @@ class Board {
         const newObstacle = this._generateObstacle(start);
         // validate the obstacle
         newObstacle.forEach((i) => {
-          const tile = this.cubeMap[i];
+          const tile = this.tileObjects[i];
           if (!tile) throw "INVALID_TILE";
 
           if (countPerSurface[tile.surface]?.includes(currentType.value)) {
@@ -164,10 +165,10 @@ class Board {
             throw "OBSTACLE_CREATE_FAIL";
           }
           if (
-            this.cubeMap[this.getAdjecentTile(i, "up")]?.obstacle ||
-            this.cubeMap[this.getAdjecentTile(i, "down")]?.obstacle ||
-            this.cubeMap[this.getAdjecentTile(i, "left")]?.obstacle ||
-            this.cubeMap[this.getAdjecentTile(i, "right")]?.obstacle
+            this.tileObjects[this.getAdjecentTile(i, "up")]?.obstacle ||
+            this.tileObjects[this.getAdjecentTile(i, "down")]?.obstacle ||
+            this.tileObjects[this.getAdjecentTile(i, "left")]?.obstacle ||
+            this.tileObjects[this.getAdjecentTile(i, "right")]?.obstacle
           ) {
             throw "OBSTACLE_TOO_CROWDED";
           }
@@ -175,7 +176,7 @@ class Board {
 
         // accept the obstacle
         newObstacle.forEach((i) => {
-          const tile = this.cubeMap[i];
+          const tile = this.tileObjects[i];
           if (!tile) throw "INVALID_TILE";
 
           const ob = new Obstacle({
@@ -207,7 +208,7 @@ class Board {
   ): number {
     const dirs = ["up", "down", "left", "right"];
     if (!dirs.includes(dir)) throw "GET_ADJECEN_TILE_INCORRECT_DIR";
-    const tile = this.cubeMap[tileNum];
+    const tile = this.tileObjects[tileNum];
     if (!tile) throw "GET_ADJECEN_TILE_INCORRECT_TILE";
     const { surface, row, col } = tile;
     let result: number | undefined;
@@ -309,8 +310,8 @@ class Board {
           player?: Player | null;
         }
   ) {
-    const a = typeof start === "number" ? this.cubeMap[start] : start;
-    const b = typeof end === "number" ? this.cubeMap[end] : end;
+    const a = typeof start === "number" ? this.tileObjects[start] : start;
+    const b = typeof end === "number" ? this.tileObjects[end] : end;
 
     if (!a || !b) return null;
 
@@ -318,7 +319,7 @@ class Board {
       const { obstacle, player } = b;
       if (obstacle) return { obstacle, distance: 0 };
       if (player)
-        return { player: this.cubeMap[Number(player)]?.player || null };
+        return { player: this.tileObjects[Number(player)]?.player || null };
       return null;
     }
 
@@ -328,11 +329,11 @@ class Board {
         // check right
         for (let i = a.col + 1; i <= b.col; i++) {
           const { obstacle, player } =
-            this.cubeMap[this.cubeArrays[a.surface][a.row][i]];
+            this.tileObjects[this.cubeArrays[a.surface][a.row][i]];
           if (obstacle) return { obstacle, distance: i - a.col };
           if (player)
             return {
-              player: this.cubeMap[Number(player)]?.player || null,
+              player: this.tileObjects[Number(player)]?.player || null,
               distance: i - a.col,
             };
         }
@@ -340,11 +341,11 @@ class Board {
         // check left
         for (let i = a.col - 1; i >= b.col; i--) {
           const { obstacle, player } =
-            this.cubeMap[this.cubeArrays[a.surface][a.row][i]];
+            this.tileObjects[this.cubeArrays[a.surface][a.row][i]];
           if (obstacle) return { obstacle, distance: a.col - i };
           if (player)
             return {
-              player: this.cubeMap[Number(player)]?.player || null,
+              player: this.tileObjects[Number(player)]?.player || null,
               distance: a.col - i,
             };
         }
@@ -355,11 +356,11 @@ class Board {
         // check down
         for (let i = a.row + 1; i <= b.row; i++) {
           const { obstacle, player } =
-            this.cubeMap[this.cubeArrays[a.surface][i][a.col]];
+            this.tileObjects[this.cubeArrays[a.surface][i][a.col]];
           if (obstacle) return { obstacle, distance: i - a.row };
           if (player)
             return {
-              player: this.cubeMap[Number(player)]?.player || null,
+              player: this.tileObjects[Number(player)]?.player || null,
               distance: i - a.row,
             };
         }
@@ -367,11 +368,11 @@ class Board {
         // check up
         for (let i = a.row - 1; i >= b.row; i--) {
           const { obstacle, player } =
-            this.cubeMap[this.cubeArrays[a.surface][i][a.col]];
+            this.tileObjects[this.cubeArrays[a.surface][i][a.col]];
           if (obstacle) return { obstacle, distance: a.row - i };
           if (player)
             return {
-              player: this.cubeMap[Number(player)]?.player || null,
+              player: this.tileObjects[Number(player)]?.player || null,
               distance: a.row - i,
             };
         }
@@ -381,18 +382,18 @@ class Board {
     return null;
   }
 
-  _getCubeArrays(): number[][][] {
-    const subsBy5: number[][] = [[]];
+  private getCubeArrays(): number[][][] {
+    const subsByGridSize: number[][] = [[]];
     let curSubArr = 0;
 
-    let i = 1;
-    while (i <= TILE_TOTAL) {
-      if (curSubArr === 5) {
-        subsBy5.push([i]);
+    let i = 0;
+    while (i < TILE_TOTAL) {
+      if (curSubArr === GRID_SIZE) {
+        subsByGridSize.push([i]);
         curSubArr = 1;
         i++;
       } else {
-        subsBy5.slice(-1)[0].push(i);
+        subsByGridSize.slice(-1)[0].push(i);
         curSubArr++;
         i++;
       }
@@ -403,17 +404,17 @@ class Board {
     let round = 0;
     i = 0;
 
-    while (i < subsBy5.length) {
+    while (i < subsByGridSize.length) {
       if (curSubArr === 3) curSubArr = 0;
 
-      if (result[curSubArr + round].length < 5) {
-        result[curSubArr + round].push(subsBy5[i]);
+      if (result[curSubArr + round].length < GRID_SIZE) {
+        result[curSubArr + round].push(subsByGridSize[i]);
       }
 
       if (
-        result[curSubArr + round].length === 5 &&
+        result[curSubArr + round].length === GRID_SIZE &&
         curSubArr === 2 &&
-        i < subsBy5.length - 1
+        i < subsByGridSize.length - 1
       ) {
         round += 3;
         result.push([], [], []);
@@ -426,19 +427,18 @@ class Board {
     return result;
   }
 
-  _getCubeMap(_cubeArrays: number[][][]): CubeTile[] {
-    const result: CubeTile[] = new Array(TILE_TOTAL);
+  private getTileObjects(): TileObject[] {
+    const result: TileObject[] = new Array(TILE_TOTAL);
 
-    for (let i = 0; i < _cubeArrays.length; i++) {
-      const surface = _cubeArrays[i];
-      for (let j = 0; j < surface.length; j++) {
-        const row = surface[j];
-        for (let k = 0; k < row.length; k++) {
-          const tileNum = row[k];
+    for (let surface = 0; surface < this.cubeArrays.length; surface++) {
+      for (let row = 0; row < this.cubeArrays[surface].length; row++) {
+        const rowArrays = this.cubeArrays[surface][row];
+        for (let col = 0; col < rowArrays.length; col++) {
+          const tileNum = rowArrays[col];
           result[tileNum] = {
-            surface: i,
-            row: j,
-            col: k,
+            surface,
+            row,
+            col,
             obstacle: null,
             player: null,
           };
@@ -460,9 +460,9 @@ class Board {
   handlePlayerMoved(player: Player, newTile: number) {
     const oldTile = this.getPlayerTile(player);
     if (oldTile !== null) {
-      this.cubeMap[oldTile].player = null;
+      this.tileObjects[oldTile].player = null;
     }
-    this.cubeMap[newTile].player = player;
+    this.tileObjects[newTile].player = player;
   }
 
   handleObstacleCollected(obstacleId: string, playerId: string) {
@@ -472,7 +472,7 @@ class Board {
   }
 
   handleObstacleLost(tileNum: number, playerId: string) {
-    const { obstacle } = this.cubeMap[tileNum];
+    const { obstacle } = this.tileObjects[tileNum];
     if (obstacle?.collectedBy !== playerId) {
       throw "OBSTACLE_LOST_FAIL";
     }
@@ -482,7 +482,7 @@ class Board {
   }
 
   handleCollectionTrading(tileNum: number, player1: Player, player2: Player) {
-    const tile = this.cubeMap[tileNum];
+    const tile = this.tileObjects[tileNum];
     if (
       !tile ||
       !tile.obstacle ||
@@ -504,8 +504,8 @@ class Board {
   }
 
   getPlayerTile(player: Player): number | null {
-    for (let i = 0; i < this.cubeMap.length; i++) {
-      if (this.cubeMap[i].player?.id === player.id) {
+    for (let i = 0; i < this.tileObjects.length; i++) {
+      if (this.tileObjects[i].player?.id === player.id) {
         return i;
       }
     }
@@ -566,7 +566,7 @@ class Player {
   }
 
   move(next: number, board: Board): MoveResult {
-    const nextTile = board.cubeMap[next];
+    const nextTile = board.tileObjects[next];
 
     if (!nextTile || !IN_PLAY_SURFACES.includes(nextTile.surface))
       throw "MOVE_FAIL_UNKNOWN_TILE";
@@ -586,18 +586,18 @@ class Player {
       if (!this.current) {
         this.current = next;
         this.start = next;
-        board.cubeMap[next].player = this;
+        board.tileObjects[next].player = this;
         this.goal =
           Player.ATTRIBUTES_BY_STARTING_SURFACE[
-            board.cubeMap[next].surface
+            board.tileObjects[next].surface
           ].goal;
         this.absoluteDirection =
           Player.ATTRIBUTES_BY_STARTING_SURFACE[
-            board.cubeMap[next].surface
+            board.tileObjects[next].surface
           ].dir;
         this.startDir =
           Player.ATTRIBUTES_BY_STARTING_SURFACE[
-            board.cubeMap[next].surface
+            board.tileObjects[next].surface
           ].dir;
         result.collected = this._collectObstacles(board);
         result.surrounding = this.getSurrounding(board);
@@ -661,7 +661,7 @@ class Player {
     const newLastPassedByObstacle: Record<string, { tileNum: number }> = {};
     (["down", "left", "up", "right"] as const).forEach((dir) => {
       const tileNum = board.getAdjecentTile(this.current!, dir);
-      const tile = board.cubeMap[tileNum!];
+      const tile = board.tileObjects[tileNum!];
       if (!tile || !tile.obstacle || tile.obstacle.collectedBy) return;
       if (board.getCollectionByPlayerId(this.id).includes(tile.obstacle.value))
         return;
@@ -690,8 +690,8 @@ class Player {
     next: number,
     board: Board
   ): "up" | "down" | "left" | "right" {
-    const curTile = board.cubeMap[this.current!];
-    const nextTile = board.cubeMap[next];
+    const curTile = board.tileObjects[this.current!];
+    const nextTile = board.tileObjects[next];
     if (curTile.surface === 1 && nextTile.surface === 3) return "left";
     if (curTile.surface === 1 && nextTile.surface === 5) return "right";
     if (curTile.surface === 3 && nextTile.surface === 1) return "up";
@@ -709,7 +709,7 @@ class Player {
     next: number,
     board: Board
   ): "up" | "down" | "left" | "right" {
-    const { surface } = board.cubeMap[this.current!];
+    const { surface } = board.tileObjects[this.current!];
 
     if ((next - this.current!) % 15 === 0) {
       if (next > this.current!) return "down";
@@ -745,7 +745,7 @@ class Player {
       left: null,
       right: null,
     };
-    const current = board.cubeMap[tileNum];
+    const current = board.tileObjects[tileNum];
 
     result.up = board.getThingsInPath(current, {
       ...current,
@@ -771,14 +771,14 @@ class Player {
     for (let direction in result) {
       if (
         result[direction] === null &&
-        board.cubeMap[board.getAdjecentTile(tileNum, direction as any)!]
+        board.tileObjects[board.getAdjecentTile(tileNum, direction as any)!]
       ) {
         const { obstacle, player } =
-          board.cubeMap[board.getAdjecentTile(tileNum, direction as any)!];
+          board.tileObjects[board.getAdjecentTile(tileNum, direction as any)!];
         if (obstacle) result[direction] = { obstacle, distance: 1 };
         if (player)
           result[direction] = {
-            player: board.cubeMap[Number(player)]?.player || null,
+            player: board.tileObjects[Number(player)]?.player || null,
             distance: 1,
           };
       }

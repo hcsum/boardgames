@@ -5,30 +5,15 @@ import { FontLoader } from "three/addons/loaders/FontLoader.js";
 import {
   Board,
   Player,
-  TILE_TOTAL,
   IN_PLAY_SURFACES,
-  PLAYER_START_TILES,
+  GRID_SIZE,
+  TileObject,
 } from "../core-game";
-import { cubeMap as debugCubeMap } from "./debug-cube-map";
-// Initialize game state
-const board = new Board();
-const cubeMap = board.cubeMap;
-// const cubeMap = debugCubeMap;
-const players = PLAYER_START_TILES.map((startTile, index) => {
-  const player = new Player(`player${index + 1}`);
-  player.move(startTile, board);
-  const surface = board.cubeMap[startTile]?.surface;
-  if (surface && surface in Player.ATTRIBUTES_BY_STARTING_SURFACE) {
-    player.absoluteDirection =
-      Player.ATTRIBUTES_BY_STARTING_SURFACE[surface].dir;
-    player.startDir = Player.ATTRIBUTES_BY_STARTING_SURFACE[surface].dir;
-  }
-  return player;
-});
+import { board, players, tileObjects } from "./init-game";
 
 // Three.js setup
 const scene = new THREE.Scene();
-const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
+const canvas = document.getElementById("3d") as HTMLCanvasElement;
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
@@ -54,27 +39,25 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
 directionalLight.position.set(5, 5, 5);
 scene.add(directionalLight);
 
+const axesHelper = new THREE.AxesHelper(5);
+scene.add(axesHelper);
+
 // Constants
-const SURFACE_SIZE = 5;
 const TILE_SIZE = 1; // 5x5 grid per surface
 const GRID_OFFSET = 0.01; // Slight offset to prevent z-fighting
 
 // Materials
 const materials = {
   grid: new THREE.LineBasicMaterial({ color: 0xffffff }),
-  player: new THREE.MeshPhongMaterial({ color: 0xff0000 }),
+  player: new THREE.MeshPhongMaterial({ color: 0xffc0cb }),
   obstacle: new THREE.MeshPhongMaterial({ color: 0x00ff00 }),
 };
 
 // Create the main cube
-const cubeGeometry = new THREE.BoxGeometry(
-  SURFACE_SIZE,
-  SURFACE_SIZE,
-  SURFACE_SIZE
-);
+const cubeGeometry = new THREE.BoxGeometry(GRID_SIZE, GRID_SIZE, GRID_SIZE);
 const cubeMaterial = new THREE.MeshPhongMaterial({
   color: 0x000000,
-  wireframe: true,
+  wireframe: false,
 });
 const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
 scene.add(cube);
@@ -84,7 +67,7 @@ scene.add(gameElements);
 
 function createGridLines(surface: number) {
   const points: THREE.Vector3[] = [];
-  const halfSize = SURFACE_SIZE / 2;
+  const halfSize = GRID_SIZE / 2;
 
   // Create vertical and horizontal lines
   for (let i = 0; i <= 5; i++) {
@@ -144,46 +127,21 @@ function createGridLines(surface: number) {
 }
 
 function createPlayer(
-  x: number,
-  y: number,
-  z: number,
-  direction: string,
-  surface: number
+  positionValue: THREE.Vector3,
+  rotationValue: THREE.Vector3,
+  direction: string
 ) {
-  const size = TILE_SIZE * 0.4; // 40% of tile size
-  const shape = new THREE.Shape();
-  shape.moveTo(0, size); // Top point
-  shape.lineTo(-size, -size); // Bottom left
-  shape.lineTo(size, -size); // Bottom right
-  shape.lineTo(0, size); // Close the shape
-
-  const geometry = new THREE.ShapeGeometry(shape);
+  console.log(direction);
+  const radius = TILE_SIZE * 0.2; // 20% of tile size for radius
+  const height = TILE_SIZE * 0.6; // 60% of tile size for height
+  const geometry = new THREE.ConeGeometry(radius, height, 32); // 32 segments for smoothness
   const mesh = new THREE.Mesh(geometry, materials.player);
-  mesh.position.set(x, y, z + 0.1); // Slightly above the surface
-
-  // Rotate based on surface and direction
-  switch (surface) {
-    case 7: // Front
-      mesh.rotation.set(0, 0, 0);
-      mesh.position.set(x, y, z + 0.1);
-      break;
-    case 3: // Left
-      mesh.rotation.set(0, Math.PI / 2, 0);
-      mesh.position.set(x - 0.1, y, z);
-      break;
-    case 4: // Top
-      mesh.rotation.set(Math.PI / 2, 0, 0);
-      mesh.position.set(x, y, z + 0.1);
-      break;
-    case 5: // Right
-      mesh.rotation.set(0, -Math.PI / 2, 0);
-      mesh.position.set(x + 0.1, y, z);
-      break;
-    case 1: // Back
-      mesh.rotation.set(0, Math.PI, 0);
-      mesh.position.set(x, y, z - 0.1);
-      break;
-  }
+  mesh.position.set(
+    positionValue.x,
+    positionValue.y,
+    positionValue.z + height / 2
+  );
+  mesh.rotation.set(rotationValue.x, rotationValue.y, rotationValue.z);
 
   // Apply direction rotation
   const directionRotations = {
@@ -200,37 +158,21 @@ function createPlayer(
 }
 
 function createObstacle(
-  x: number,
-  y: number,
-  z: number,
-  color: string,
-  surface: number
+  positionValue: THREE.Vector3,
+  rotationValue: THREE.Vector3,
+  color: string
 ) {
-  const size = TILE_SIZE * 0.8; // 80% of tile size
-  const height = TILE_SIZE * 0.2; // 20% of tile size for height
+  const size = TILE_SIZE * 0.9;
+  const height = TILE_SIZE * 0.4;
   const geometry = new THREE.BoxGeometry(size, size, height);
   const material = new THREE.MeshPhongMaterial({ color: parseInt(color, 16) });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(x, y, z + height / 2);
-
-  // Rotate based on surface
-  switch (surface) {
-    case 7: // Front
-      mesh.rotation.set(0, 0, 0);
-      break;
-    case 3: // Left
-      mesh.rotation.set(0, Math.PI / 2, 0);
-      break;
-    case 4: // Top
-      mesh.rotation.set(Math.PI / 2, 0, 0);
-      break;
-    case 5: // Right
-      mesh.rotation.set(0, -Math.PI / 2, 0);
-      break;
-    case 1: // Back
-      mesh.rotation.set(0, Math.PI, 0);
-      break;
-  }
+  mesh.position.set(
+    positionValue.x,
+    positionValue.y,
+    positionValue.z + height / 2
+  );
+  mesh.rotation.set(rotationValue.x, rotationValue.y, rotationValue.z);
 
   return mesh;
 }
@@ -254,7 +196,7 @@ function createSurfaceLabel(surface: number) {
       const mesh = new THREE.Mesh(geometry, material);
 
       // Position based on surface
-      const halfSize = SURFACE_SIZE / 2;
+      const halfSize = GRID_SIZE / 2;
       switch (surface) {
         case 7: // Front
           mesh.position.set(0, 0, halfSize + GRID_OFFSET);
@@ -281,9 +223,8 @@ function createSurfaceLabel(surface: number) {
   );
 }
 
-console.log(cubeMap);
+console.log(tileObjects);
 
-// Render the cube
 function renderCube() {
   // Clear existing game elements
   while (gameElements.children.length > 0) {
@@ -295,84 +236,76 @@ function renderCube() {
     new THREE.Vector3(-5, 5, 0),
     new THREE.Vector3(5, 5, 0),
   ]);
-  const line = new THREE.Line(
-    points,
-    new THREE.LineBasicMaterial({ color: 0xffffff })
-  );
-  gameElements.add(line);
 
-  // Add grid lines for each surface
   IN_PLAY_SURFACES.forEach((surface) => {
     const gridLines = createGridLines(surface);
     gameElements.add(gridLines);
-    // Add surface number label
     createSurfaceLabel(surface);
   });
 
-  // return;
+  for (const tile of tileObjects) {
+    const { row, col, surface } = tile;
+    const halfSize = GRID_SIZE / 2;
+    const positionValue = new THREE.Vector3(0, 0, 0);
+    const rotationValue = new THREE.Vector3(0, 0, 0);
 
-  // Create game elements (players and obstacles)
-  for (let i = 1; i <= TILE_TOTAL; i++) {
-    const tile = cubeMap[i];
-    if (!tile) continue;
-
-    const row = tile.row;
-    const col = tile.col;
-    const halfSize = SURFACE_SIZE / 2;
-    let x = 0;
-    let y = 0;
-    let z = 0;
-
-    // Calculate position based on surface, row, and col
-    switch (tile.surface) {
+    switch (surface) {
       case 7: // Front
-        x = (col - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
-        z = halfSize + 0.1;
-        y = ((SURFACE_SIZE - 1) / 2 - row) * TILE_SIZE;
+        positionValue.set(
+          (col - (GRID_SIZE - 1) / 2) * TILE_SIZE,
+          ((GRID_SIZE - 1) / 2 - row) * TILE_SIZE,
+          halfSize
+        );
+        rotationValue.set(0, 0, 0);
         break;
       case 3: // Left
-        x = -halfSize - 0.1;
-        y = (col - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
-        z = (row - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
+        positionValue.set(
+          -halfSize - 0.1,
+          (col - (GRID_SIZE - 1) / 2) * TILE_SIZE,
+          (row - (GRID_SIZE - 1) / 2) * TILE_SIZE - 0.2
+        );
+        rotationValue.set(0, Math.PI / 2, 0);
         break;
       case 4: // Top
-        x = (col - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
-        y = halfSize + 0.1;
-        z = (row - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
+        positionValue.set(
+          (col - (GRID_SIZE - 1) / 2) * TILE_SIZE,
+          halfSize + 0.1,
+          (row - (GRID_SIZE - 1) / 2) * TILE_SIZE - 0.2
+        );
+        rotationValue.set(Math.PI / 2, 0, 0);
         break;
       case 5: // Right
-        x = halfSize + 0.1;
-        y = ((SURFACE_SIZE - 1) / 2 - col) * TILE_SIZE;
-        z = (row - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
+        positionValue.set(
+          halfSize + 0.1,
+          ((GRID_SIZE - 1) / 2 - col) * TILE_SIZE,
+          (row - (GRID_SIZE - 1) / 2) * TILE_SIZE - 0.2
+        );
+        rotationValue.set(0, -Math.PI / 2, 0);
         break;
       case 1: // Back
-        x = (col - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
-        z = -halfSize - 0.1;
-        y = (row - (SURFACE_SIZE - 1) / 2) * TILE_SIZE;
+        positionValue.set(
+          (col - (GRID_SIZE - 1) / 2) * TILE_SIZE,
+          (row - (GRID_SIZE - 1) / 2) * TILE_SIZE,
+          -halfSize - 0.1 - 0.2
+        );
+        rotationValue.set(0, Math.PI, 0);
         break;
     }
 
-    // Add player if present
-    // if (tile.player !== null) {
-    //   const playerMesh = createPlayer(
-    //     x,
-    //     y,
-    //     z,
-    //     tile.player.absoluteDirection || "up",
-    //     tile.surface
-    //   );
-    //   gameElements.add(playerMesh);
-    // }
+    if (tile.player !== null) {
+      const playerMesh = createPlayer(
+        positionValue,
+        rotationValue,
+        tile.player.absoluteDirection || "up"
+      );
+      gameElements.add(playerMesh);
+    }
 
-    // Add obstacle if present
     if (tile.obstacle !== null) {
-      if (tile.surface === 5) console.log(tile);
       const obstacleMesh = createObstacle(
-        x,
-        y,
-        z,
-        tile.obstacle.color,
-        tile.surface
+        positionValue,
+        rotationValue,
+        tile.obstacle.color
       );
       gameElements.add(obstacleMesh);
     }
@@ -400,34 +333,3 @@ window.addEventListener("resize", () => {
 // Initial render
 renderCube();
 animate();
-
-// Expose game state to browser console
-declare global {
-  interface Window {
-    game: {
-      board: Board;
-      players: Player[];
-      move: (playerIndex: number, tileNumber: number) => void;
-    };
-  }
-}
-
-window.game = {
-  board,
-  players,
-  move: (playerIndex: number, tileNumber: number) => {
-    const player = players[playerIndex];
-    if (!player) {
-      console.error(`Player ${playerIndex} not found`);
-      return;
-    }
-    try {
-      const result = player.move(tileNumber, board);
-      board.handlePlayerMoved(player, result.current);
-      renderCube();
-      console.log(`Move result:`, result);
-    } catch (error) {
-      console.error(`Move failed:`, error);
-    }
-  },
-};

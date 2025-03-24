@@ -11,7 +11,7 @@ function createGame() {
   const players = PLAYER_START_TILES.map((startTile, index) => {
     const player = new Player(`player${index + 1}`);
     const result = player.move(startTile, board);
-    const surface = board.cubeMap[startTile]?.surface;
+    const surface = board.tileObjects[startTile]?.surface;
     if (surface && surface in Player.ATTRIBUTES_BY_STARTING_SURFACE) {
       player.absoluteDirection =
         Player.ATTRIBUTES_BY_STARTING_SURFACE[surface].dir;
@@ -43,7 +43,7 @@ function testGameSetup() {
   });
 
   // Verify playable surfaces
-  const playableTiles = Object.entries(board.cubeMap).filter(([_, tile]) =>
+  const playableTiles = Object.entries(board.tileObjects).filter(([_, tile]) =>
     IN_PLAY_SURFACES.includes(tile.surface)
   ).length;
   console.log("Playable tiles:", playableTiles);
@@ -93,13 +93,13 @@ function testObstacleCollection() {
   const player = players[0];
 
   // Find an obstacle to collect
-  const obstacleTile = Object.entries(board.cubeMap).find(
+  const obstacleTile = Object.entries(board.tileObjects).find(
     ([_, tile]) => tile.obstacle && !tile.obstacle.collectedBy
   )?.[0];
 
   if (obstacleTile) {
     console.log("Found obstacle at tile:", obstacleTile);
-    const obstacle = board.cubeMap[Number(obstacleTile)].obstacle;
+    const obstacle = board.tileObjects[Number(obstacleTile)].obstacle;
     console.log("Obstacle details:", {
       value: obstacle?.value,
       color: obstacle?.color,

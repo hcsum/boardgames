@@ -4,9 +4,18 @@ body {
   padding: 1em;
   height: 2000px;
 }
+
 .wrapper {
   position: relative;
+  display: flex;
+}
+
+#2d {
+  position: relative;
   margin-left: 5px;
+}
+canvas {
+  margin-top: 1000px;
 }
 .tile {
   position: absolute;
